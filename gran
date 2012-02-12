@@ -1,0 +1,1176 @@
+#!/usr/bin/env python
+
+"""Security analyser for Grsecurity RBAC policies."""
+
+__authors__     = ["Michele Bugliesi <michele at dais.unive.it>",
+                   "Stefano Calzavara <calzavara at dais.unive.it>",
+                   "Riccardo Focardi <focardi at dais.unive.it>",
+                   "Marco Squarcina <msquarci at dais.unive.it>"]
+__license__     =  "MIT"
+__copyright__   =  "Copyright 2012, University of Venice"
+__status__      =  "Development"
+__version__     =  "0.1"
+
+import re, fnmatch, sys, pwd, grp, os, glob, argparse
+
+try:
+  import ply.lex as lex
+  import ply.yacc as yacc
+except ImportError:
+  die("Module PLY not found.")
+
+# RBAC policy parser
+
+reserved = {
+    'role' : 'ROLE',
+    'role_allow_ip' : 'ROLE_ALLOW_IP',
+    'role_transitions' : 'ROLE_TRANSITIONS',
+    'domain' : 'DOMAIN',
+    'subject' : 'SUBJECT',
+    'user_transition_allow' : 'USER_TRANSITION_ALLOW',
+    'user_transition_deny' : 'USER_TRANSITION_DENY',
+    'group_transition_allow' : 'GROUP_TRANSITION_ALLOW',
+    'group_transition_deny' : 'GROUP_TRANSITION_DENY',
+    'ip_override' : 'IP_OVERRIDE',
+    'connect_reserved' : 'CONNECT',
+    'bind_reserved' : 'BIND',
+    'disabled' : 'DISABLED',
+    'sock_allow_family' : 'SOCK_ALLOW_FAMILY'
+}
+
+# List of token names.
+tokens = [
+ #  'ROLE_MODE_PLUS',
+    'CAPABILITY',
+    'RESOURCE',
+    'PAX_FLAG',
+    'LIMIT',
+    'IP_ADDRESS',
+    'NUMBER',
+    'OPATH',
+    'RES',
+    'PORT',
+    'ID'                # default in case the reserved word does not match
+] + list(reserved.values())
+
+literals = ['-','+','{','}',':','.']
+
+# Regular expression rules for simple tokens
+
+def t_CAPABILITY(t):
+  r'[+-]CAP_[A-Z_]*'
+  return t
+
+def t_PAX_FLAG(t):
+  r'[+-]PAX_[A-Z_]*'
+  return t
+
+def t_RESOURCE(t):
+  r'RES_[A-Z]*'
+  return t
+
+t_RES = r'RES_[A-Z_]*'
+t_LIMIT = r'[0-9]+[a-zA-Z]?' # a number followed by an optional single char (the unit)
+t_NUMBER = r'[0-9]+'
+t_IP_ADDRESS = r'[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+'
+#t_PATH = r'(/([a-zA-Z][a-zA-Z_\-0-9]*)*)+'
+#t_OPATH = r'(/([a-zA-Z\.\*_][a-zA-Z_\-\.\*\?0-9]*)*)+'
+t_OPATH = r'(/[\w\.\*\?\-\+\_]*)+'
+t_PORT = r':[0-9]+(\-[0-9]+)?'
+
+def t_COMMENT(t):
+    r'\#.*'
+    pass
+    # No return value. Token discarded
+
+
+def t_ID(t):
+    r'[a-zA-Z_][a-zA-Z_0-9-]*'
+    t.type = reserved.get(t.value,'ID')    # Check for reserved words
+    return t
+
+# def t_ROLE_MODE_PLUS(t):
+#     r'[ugsAGINPTR]+'
+#     return t
+
+
+t_ignore = ' \t'
+
+def t_newline(t):
+    r'\n+'
+    t.lexer.lineno += t.value.count("\n")
+
+def t_error(t):
+    print("Illegal character '%s' at line %i" % (t.value[0] , t.lexer.lineno)) 
+    t.lexer.skip(1)
+
+
+# # Test it out
+# data = '''role pippo subject connect u connect'''
+
+# print data
+
+# # Give the lexer some input
+# lexer.input(data)
+
+# # Tokenize
+# while True:
+#     tok = lexer.token()
+#     if not tok: break      # No more input
+#     print tok
+
+def p_error(p):
+    die("Syntax error at token '" + str(p.type) + "', value: '" + str(p.value) + "' line: " + str(p.lineno))
+    #print "Syntax error at token", p.type, p.value, "line",p.lineno
+    # Just discard the token and tell the parser it's okay.
+    yacc.errok()
+
+def p_policy(t):
+    '''policy : role_definition policy
+              | role_definition'''
+    t[0] = [t[1]]
+    if len(t)>2:
+      t[0] += t[2]
+
+def p_empty(t):
+    'empty :'
+    t[0] = ''
+
+def p_ids(t):
+    '''ids : ID ids
+         | ID'''
+    t[0] = set([t[1]])
+    if len(t)==3:
+      t[0] |= t[2]
+
+def p_oid(t):
+    '''oid : ID
+         | empty'''
+    t[0] = t[1]
+
+def p_role_definition(t):
+    'role_definition : ROLE ID oid role_allow_ip role_transitions subject_definitions' 
+    t[0] = [t[2],t[3],t[5],t[6]]
+
+def p_role_allow_ip(t):
+    '''role_allow_ip : ROLE_ALLOW_IP IP_ADDRESS cidr_netmask role_allow_ip
+                     | empty'''
+    # manca netmask facoltativa qui sopra
+
+def p_role_transitions(t):
+    '''role_transitions : ROLE_TRANSITIONS ids role_transitions
+                     | empty'''
+    t[0] = set([])
+    if len(t)==4:
+      t[0] |= t[2] | t[3]
+    
+def p_subject_definitions(t):
+    '''subject_definitions : subject_definition subject_definitions
+                           | subject_definition'''
+    t[0] = [t[1]]
+    if len(t)==3:
+      t[0] += t[2]
+
+# Ommitted { } I directly ignore them
+# Just one user_transition and group_transition, is correct? Otherwise we have to handle conflicts
+def p_subject_definition(t):
+    '''subject_definition : SUBJECT subject_paths subject_modes left user_transitions group_transitions ip_overrides file_definitions definitions right'''
+    t[0] = [t[2], t[5], t[6], t[8], t[3], t[9]]
+
+def p_definitions(t):
+    '''definitions : CAPABILITY definitions
+                  | resource_definition definitions
+                  | pax_flag_definition definitions
+                  | ip_acl_definition definitions
+                  | empty'''
+    if len(t)==2:
+      t[0] = []
+    elif t[1]:
+      t[0] = [t[1]]+t[2]
+    else:
+      t[0] = t[2]
+
+def p_left(t):
+    '''left : '{'
+            | empty '''
+ 
+def p_right(t):
+    '''right : '}'
+             | empty '''
+    
+       
+# Here Spender EBNF seems wrong
+def p_subject_paths(t):
+    '''subject_paths : subject_path ':' subject_paths
+                     | subject_path '''
+    if len(t)==3:
+      print ("[ Line ",t.lexer.lineno,"] Sorry, nested path are not supported at the moment")
+      exit(1)
+    t[0] = t[1]
+
+# I'm admitting wildcards here....
+def p_subject_path(t):
+  '''subject_path : OPATH '''
+#     '''subject_path : '/'
+#                     | '/' ID
+#                     | '/' ID subject_path '''
+  t[0] = t[1]
+
+def p_subject_modes(t):
+    '''subject_modes : ID
+                     | empty '''
+    t[0] = t[1]
+
+# I use subject_path but we need to add wildcards!
+def p_file_definitions(t):
+    '''file_definitions : file_definition file_definitions
+                        | empty'''
+    t[0] = [t[1]]
+    if len(t)==3 and t[2] != ['']:
+      t[0] = t[0] + t[2]
+
+def p_file_definition(t):
+    '''file_definition : OPATH oid'''
+    t[0] = [t[1],t[2]]
+
+# def p_capability_definitions(t):
+#     '''capability_definitions : capability_definition capability_definitions
+#                               | empty'''
+
+#def p_capability_definition(t):
+#    '''capability_definition : CAPABILITY'''
+
+
+# def p_resource_definitions(t):
+#     '''resource_definitions : resource_definition  resource_definitions
+#                             | empty'''
+
+def p_resource_definition(t):
+    '''resource_definition : RESOURCE LIMIT LIMIT'''
+
+# def p_pax_flag_definitions(t):
+#     '''pax_flag_definitions : pax_flag_definition  pax_flag_definitions
+#                               | empty'''
+
+def p_pax_flag_definition(t):
+    '''pax_flag_definition : PAX_FLAG'''
+
+# def p_ip_acl_definitions(t):
+#     '''ip_acl_definitions : ip_acl_definition ip_acl_definitions
+#                               | empty'''
+
+def p_ip_acl_definition(t):
+    '''ip_acl_definition : CONNECT DISABLED
+                         | BIND DISABLED
+                         | CONNECT ip_acl_address
+                         | BIND ip_acl_address
+                         | SOCK_ALLOW_FAMILY ids'''
+
+def p_url(t):
+  '''url : ID '.' url
+         | ID'''
+  t[0] = t[1]
+  if len(t) > 2:
+     t[0] += '.' + t[3]
+
+def p_ip_acl_address(t):
+    '''ip_acl_address : IP_ADDRESS cidr_netmask port ids
+                      | url port ids''' 
+
+def p_cidr_netmask(t):
+    '''cidr_netmask : OPATH
+                    | empty'''
+    if t[1] != '' and not re.match(r"/[0-9]+",t[1]):
+      p_error(t)  
+
+def p_port(t):
+    '''port : PORT
+            | empty'''
+
+# Not used for the moment
+def p_user_transitions(t):
+    '''user_transitions : user_transition user_transitions
+                        | empty'''
+    if len(t)==3:
+      if t[2] == '':
+        t[0] = t[1]
+      else:
+        if t[1][0] == t[2][0]:
+          t[0] = [t[1][0], t[1][1] | t[2][1]]
+    else:
+        t[0] = t[1]
+
+# if we reintroduce transitions above we have to remove empty here
+def p_user_transition(t):
+    '''user_transition : USER_TRANSITION_ALLOW ids 
+                       | USER_TRANSITION_DENY  ids'''
+#    if len(t) > 2 and t[2] & set(users) != t[2]:
+#      print "Warning: allowing/denying non-existent users", t[2] - setusers
+
+    t[0] = [t[1],t[2]]
+    
+# skip this for the moment
+def p_group_transitions(t):
+    '''group_transitions : group_transition group_transitions
+                         | empty'''
+    if len(t)==3:
+      if t[2] == '':
+        t[0] = t[1]
+      else:
+        if t[1][0] == t[2][0]:
+          t[0] = [t[1][0],t[1][1] | t[2][1]]
+    else:
+      t[0] = t[1]
+
+# same as for users    
+def p_group_transition(t):
+    '''group_transition : GROUP_TRANSITION_ALLOW ids
+                       |  GROUP_TRANSITION_DENY  ids'''
+#    if len(t) > 2 and t[0] & t[2] != t[2]:
+#      print "Warning: allowing/denying non-existent groups", t[2] - setgroups
+    t[0] = [t[1],t[2]]
+
+
+def p_ip_overrides(t):
+    '''ip_overrides : ip_override ip_overrides
+                    | empty'''
+
+def p_ip_override(t):
+    '''ip_override : IP_OVERRIDE IP_ADDRESS'''
+
+#------------------------------------------------------------------------------------------
+
+def matchbc(m):
+  return m.group(1)+m.group(2)+"_reserved"+m.group(3)
+
+def die(s):
+  """Exits on fatal errors."""
+  sys.stderr.write("[ERROR] {}\n".format(s))
+  sys.exit(1)
+
+def preprocess_policy(p):
+    '''Pre-process the policy before parsing it'''
+    # FIXME: regexp fails if there's a comment containing '}' in a define block
+    define = re.compile("^\s*define\s+(\w+)\s+{(.*?)}", flags = re.DOTALL | re.MULTILINE)
+    replace = re.compile("^\s*replace\s+(\w+)\s+(\S+)", flags = re.MULTILINE)
+
+    # purge comments
+    p = re.sub("#.*", "", p)
+    # purge replace statements
+    for r in replace.findall(p):
+        p = p.replace("$("+r[0]+")", r[1])
+    p = replace.sub("", p)
+    # purge define blocks
+    for d in define.findall(p):
+        p = p.replace("$"+d[0], d[1])
+    p = define.sub("", p)
+    # purge braces
+    p = re.sub("{|}", "", p)
+    # FIXME: temporary hack to purge all connect and bind rules before parsing
+    p = re.sub("^(\s*)(connect|bind)(.+)", matchbc, p, flags = re.MULTILINE)
+    # FIXME: temporay hack to purge role_allow_ip rules
+    p = re.sub("^\s*role_allow_ip.*", "", p, flags = re.MULTILINE)
+
+    return p
+
+def get_policy(fname):
+    policy = ""
+
+    include = re.compile("\s*include\s+<(.*?)>")
+    fname = os.path.abspath(fname)
+    # it's a dir, we need to parse all the files inside
+    if os.path.isdir(fname):
+        # ignore hidden files
+        for fname_new in glob.glob(os.path.join(fname, '*')):
+            policy += get_policy(os.path.join(fname, fname_new))
+    # it's a single file, parse it and resolve include directives
+    else:
+      try:
+        f = open(fname, 'r')
+      except IOError:
+        die("{} does not exists, exiting.".format(fname))
+      for line in f:
+          m = include.match(line)
+          if m:
+              # strip '/etc/grsec' out from the path and put current dirname
+              fname_new = os.path.join(os.path.dirname(fname), os.path.abspath(m.group(1))[11:])
+              policy += get_policy(fname_new)
+          else:
+              policy += line
+      f.close()
+
+    return policy
+
+# Finds if p2 matches p1, which may contain wildcards
+# We have checked that trailing / is interpreted as expected: as a directory
+# thus /usr/bin/cat does not match /usr/bin/cat/
+def pathmatch(p1,p2):
+  if p1 == '/':
+    pp1 = [''] #special case for '/'. To avoid it is represented as ['','']
+  else:
+    pp1 = p1.split('/')
+  if p2 == '/':
+    pp2 = ['']
+  else:
+    pp2 = p2.split('/')
+  if len(pp1)>len(pp2):
+    return False
+  else:
+    for i in range(len(pp1)):
+      # try to match any step (pp1 can have wildcards)
+      if not fnmatch.fnmatchcase(pp2[i],pp1[i]):
+        return False
+    return True  
+      # if survived check the case where pp1 is shorter
+#      if len(pp1)<len(pp2) and pp1[-1] != "/":
+#        # if shorter we require it's a path and not a filename
+#        return False
+#      else:
+#        return True
+
+# finds the greatest matching path for p in set s
+def GMP(s,p):
+  matching = [x for x in s if pathmatch(x,p)]
+  if matching == []:
+    return None
+  else:
+    return max(matching,key=len)
+
+# recursively computes the 'closure' of subject permissions wrt inheritance
+# takes a dictionary that for each role gives a set of (subject,mode) and the permissions
+# returns the new permissions # add role_subj_cap
+def Inheritance(R,rs,perm):
+  for r in R: # for any role
+    rs_cap_todo = [x for x in rs[r].keys() if 'o' in rs[r][x]]
+    for s in rs_cap_todo:
+      role_subj_cap[(r, s)] = cap_compute(role_subject_caps[(r, s)])
+
+    # only takes subject with no 'o' in the mode, sorted by length
+    rs_todo = [x for x in rs[r].keys() if 'o' not in rs[r][x]]
+    rs_set = set([x for x in rs[r].keys()])
+    rs_todo.sort(key=len)
+#    while rs_todo != set([]): # while there's something to process
+    for s in rs_todo:
+      parent = GMP(rs_set-set([s]),s)
+      if not parent: continue # this is when there is no match
+
+      #if rs_todo.index(parent) > rs_todo.index(s): # this should never happen
+      #  die("In Inheritance, parent " + str(parent) + " of subject " + str(s) + " not yet processed")
+      #
+      ip = perms.keys()
+      # copy caps from parent to child (inheritance) recalculating them
+      role_subj_cap[(r, s)] = cap_compute(role_subject_caps[(r, parent)] + role_subject_caps[(r, s)])
+      parent_perms = [x for x in ip if x[0]==r and x[1]==parent and (x[0],s,x[2]) not in ip ]
+      for pp in parent_perms:
+        # copy permissions from parent to child (inheritance)
+        perms[(pp[0],s,pp[2])] = perms[pp]
+        #print "Adding",(pp[0],s,pp[2]),perms[pp],"from",pp
+
+  return perms
+
+def beautyPrint(perms,R,rs,O):
+  O = [o for o in O]
+  O.sort(key=len)
+  for r in R:
+    print "Role",r
+    sub = [x for x in rs[r].keys()]
+    sub.sort(key=len)
+    for s in sub:
+      print "  Subject",s
+      for o in O:
+        if (r,s,o) in perms:
+          print "    ",o,"\t\t\t", perms[r,s,o]
+        
+# sums-up capabilities
+def cap_compute(rsc):
+  allCaps = set(['CAP_SETGID','CAP_SETUID'])
+  caps =  allCaps.copy() # by default we give both
+  for d in rsc:
+    if d[1:] == 'CAP_ALL':
+      tmp = allCaps.copy()
+    else:
+      tmp = set([d[1:]]) & allCaps # we only keep the interesting ones
+    if d[0] == '-':
+      caps -= tmp
+    else:
+      caps |= tmp
+  return caps
+
+# this is eff_role directly on a state
+def s_eff_role(s):
+  return eff_role([s[0],s[1],s[2]])
+
+def eff_role(rl):
+  flags = ['s','u','g','d']
+  rl.append('default')
+  i = 0
+  while rl[0] == DONTCARE:
+    rl.pop(0)
+    i+=1
+  return (rl[0],flags[i])
+
+def down_proj(p,r):
+  if isinstance(r[0],str) == 1: # just a role
+    return [rs for rs in role_subjects[r] if pathmatch(rs,p)]
+  else: # role plus subject
+    return [rs for rs in role_subject_objects[r] if pathmatch(rs,p)]
+
+def ex_img(o,r,s):
+  """Returns the set of all the subjects more specific than o and for which o
+  is the best match in (r,s) plus the GMP of o. The idea is that we could be
+  executing all of these subjects when executing o"""
+
+  ss = [s2 for s2 in set(S) if pathmatch(o,s2)]
+  r1 = [sp for sp in ss if match(sp,(r,s)) == o] 
+  r2 = [GMP(set(S),o)] # the subject matching o
+
+  return set(r1) | set(r2)
+
+def user_role(u):
+  if u in rU:
+    return u
+  else:
+    return DONTCARE
+
+def grp_role(g):
+  if g in rG:
+    return g
+  else:
+    return DONTCARE
+
+def match(p,r):
+  matching = down_proj(p,r)
+  matching.sort(key=len)
+  if matching == []:
+    die("Matching gives empty result with path "+str(p)+" and role "+str(r))
+  return matching[-1]
+
+def rbac_state(s):
+  role = s_eff_role(s)
+  return role[0]+':'+role[1].upper()+':'+match(s[3],role)
+
+def printStates(States):
+  i = 1
+  for s in States:
+    print i , "] ", rbac_state(s)
+    i += 1
+
+def printReachableStates(TraceStates):
+  i = 1
+  # this is lexicographic on the traces!
+  #for s, trace in sorted(TraceStates.iteritems(), key=lambda (k,v): (v,k)):
+  for s, trace in sorted(TraceStates.iteritems(), key=lambda (k,v): len(v)):
+    print i , "] -", ".".join(trace),"->",rbac_state(s)
+    i += 1
+
+def traceToString(trace):
+  s = ''
+  for t in trace:
+    s += rbac_state(t[0]) + " -" + t[1] + "-> "
+  return s
+
+
+def traceToStringReverse(trace):
+  s = ''
+  for t in trace:
+    s += " -" + t[0] + "-> " + rbac_state(t[1])
+  return s
+    
+def printReachableStatesE(TraceStates):
+  i = 1
+  # this is lexicographic on the traces!
+  #for s, trace in sorted(TraceStates.iteritems(), key=lambda (k,v): (v,k)):
+  for s, trace in sorted(TraceStates.iteritems(), key=lambda (k,v): len(v)):
+    print "     [" + str(i) + "] " + traceToString(trace) + rbac_state(s)
+    i += 1
+
+def printTrans(Trans,loops):
+  i = 1
+  for t in Trans:
+    if loops or t[0] != t[2]:
+      print i, "] ", t[0]
+      print "\t\t\t\t -",t[1],"->",t[2]
+      i += 1
+
+def printTransMap(loops):
+  i = 1
+  for t in TransMap.keys():
+    print "state",i, "> ", t
+    j = 1
+    for tt in TransMap[t]:
+      if loops or t != tt[1]:
+        print (str(i)+"."+str(j)).rjust(10)," - ",tt[0].ljust(17),"->",tt[1]
+        j+=1
+    i+=1
+
+# list objects from state information (role + subject)
+def StateObjects(s):
+  role = s_eff_role(s) # effective role
+  return role_subject_objects[role,match(s[3],role)]
+
+# returns a list of states in States with permission pe on file t
+def StatesWithPermissions(pe,t):
+  readPermissions = [p for p in perms.keys() if p[2] == t and pe in perms[p] ]
+  return [s for s in States for p in readPermissions if eff_role([s[0],s[1],s[2]]) == p[0] and p[1] == match(s[3],p[0]) ]
+
+# returns the string of permissions in state s on t
+def PermissionInState(s,t):
+  role = eff_role([s[0],s[1],s[2]])
+  #result = [perms[p] for p in perms.keys() if p[0]==role and p[1] == match(s[3],role) and p[2] == t]
+  return perms[(role,match(s[3],role),t)]
+  # if result == []:
+  #   print "\nLista vuota??", s,t, StateObjects(s)
+  # return result[0]
+
+# returns the objects with permission pe in state s
+def ObjectsWithPermissions(pe,s):
+  role = eff_role([s[0],s[1],s[2]])
+  result = [p[2] for p in perms.keys() if p[0]==role and p[1] == match(s[3],role) and pe in perms[p]]
+  return result
+
+#optimized and precomputed!
+def ObjectsWithWritePermissions(s):
+  role = eff_role([s[0],s[1],s[2]])
+  return object_with_write_permissions[role,match(s[3],role)]
+def ObjectsWithReadPermissions(s):
+  role = eff_role([s[0],s[1],s[2]])
+  return object_with_read_permissions[role,match(s[3],role)]
+
+# reachable states not through the list of blacklisted roles
+def ReachableStates(s):
+  if eff_role([s[0],s[1],s[2]]) in b_roles:
+    return set([])
+
+  # visited states
+  visited = {}
+  visited[s] = [] # list of labels to reach the state
+  todo = [('',s)]
+  while todo:
+    state = todo.pop()
+    #           stati raggiungibili da state[1] in 1 passo
+    toadd = [ss for ss in TransMap[state[1]] if ss[1] not in visited.keys() and eff_role([ss[1][0],ss[1][1],ss[1][2]]) not in b_roles]
+    todo += toadd
+    if toadd != []:
+     for st in toadd:
+       visited[st[1]] = visited[state[1]] + [st[0]] # keep track of the label
+
+  return visited
+
+def ReachableStatesE(s):
+  # we filter out blacklisted roles
+  if eff_role([s[0],s[1],s[2]]) in b_roles:
+    return set([])
+
+  # visited states
+  visited = {}
+  visited[s] = () # list of labels to reach the state
+  todo = [((),s)]
+  while todo:
+    state = todo.pop()
+    #           stati raggiungibili da state[1] in 1 passo
+    toadd = [ss for ss in TransMap[state[1]] if ss[1] not in visited.keys() and eff_role([ss[1][0],ss[1][1],ss[1][2]]) not in b_roles]
+    todo += toadd
+    if toadd != []:
+     for st in toadd:
+       visited[st[1]] = visited[state[1]] + ((state[1],st[0]),) # keep track of the label
+  return visited
+  
+# computes all the object that are writable after having read the target, starting from s
+def ReachableWriteObjects(s,target):
+  # we filter out blacklisted roles
+  if eff_role([s[0],s[1],s[2]]) in b_roles:
+    return {}
+
+  # constant values to encode the kind of search
+  READ=0   # still have to visit a read state
+  WRITE=1  # looking for write states
+  # visited states
+  visited = ({},{}) # visited before and after reading the target
+
+  visited[READ][s] = ( ('', s ), ) # tuple of labels (trace) to reach the state
+  result = {} # the writable objects with traces to reach them
+  todo = [((),s,READ)] # the starting state with empty trace
+  while todo:
+    state = todo.pop() # we get one of the state to visit
+
+    mod = state[2]
+    # if we are looking for a read state and this one is a read state we change modality
+    if mod == READ and Read(state[1],target):
+      mod = WRITE
+      if state[1] not in visited[WRITE]:
+        visited[WRITE][state[1]] = visited[READ][state[1]]
+
+    # if we are looking for a write state
+    if mod == WRITE:
+      objs = ObjectsWithWritePermissions(state[1])
+      # we add all objects with write permissions in the result
+      for oo in objs:
+        if oo not in result: # still empty write the empty set
+          result[oo] = set([])
+        # add the new state/path for the object
+        result[oo] |= set([visited[state[2]][state[1]]])
+
+    # we compute the states reachable from state[1] in one step and not yet visited, along state[2] (the modality)
+    toadd = [ss + (mod,) for ss in TransMap[state[1]] if ss[1] not in visited[mod].keys() and eff_role([ss[1][0],ss[1][1],ss[1][2]]) not in b_roles]
+    todo += toadd
+    if toadd != []:
+      for st in toadd:
+        visited[mod][st[1]] = visited[state[2]][state[1]] + ((st[0],st[1]),) # keep track of the label
+
+  return result
+
+# READ/WRITE permissions in states: is o readable/writable in state s?
+# This is from Stefano's formalization
+def Read(s,o):
+  pis = PermissionInState(s,GMP(StateObjects(s),o)) 
+  return 'r' in pis and 'h' not in pis
+def Write(s,o):
+  pis = PermissionInState(s,GMP(StateObjects(s),o)) 
+  return (set('wac') & set(pis) != set([])) and 'h' not in pis
+
+# this is different from Stefano's as I compute all traces and set when o is readable
+# given reachable states (this allows for computing reachable states once)
+def RRead(rs,o):
+  return {d:rs[d] for d in rs if Read(d,o)}
+def RWrite(rs,o):
+  return {d:rs[d] for d in rs if Write(d,o)}
+def RReadState(s,o):
+  return RRead(ReachableStates(s),o)
+def RWriteState(s,o):
+  return RWrite(ReachableStates(s),o)
+
+# Now we give Stefano's extended with traces
+def ERead(s,o):
+  return RReadState(s,o) != {}
+def EWrite(s,o):
+  return RWriteState(s,o) != {}
+
+def direct_flows(mode):
+  # just in case: we check if the target is reachable in s2
+  for t in targets:
+    for ep in entry_points:
+      try:
+        if mode == 'r':
+          if Read(ep,t):
+            print("[!!] Target {} directly readable from {}".format(t, rbac_state(ep)))
+            continue
+        elif mode == 'w':
+          if Write(ep,t):
+            print("[!!] Target {} directly writable from {}".format(t, rbac_state(ep)))
+            continue
+        s_reach =  ReachableStatesE(ep)
+        target_s = {}
+        for s in s_reach:
+          if mode == 'r':
+            if Read(s,t):
+              target_s[s] = s_reach[s]
+          elif mode == 'w':
+            if Write(s,t):
+              target_s[s] = s_reach[s]
+        if target_s != {}:
+          if mode == 'r':
+            print("[!!] Direct flows for reading found on target {} from {}".format(t, rbac_state(ep)))
+          elif mode == 'w':
+            print("[!!] Direct flows for writing found on target {} from {}".format(t, rbac_state(ep)))
+          printReachableStatesE(target_s)
+        elif args.debug:
+          print("[**] No direct flows found on target {} from {} ^_^".format(t, rbac_state(ep)))
+      except KeyError:
+        pass
+
+def indirect_flows():
+  for s1,s2,t in flow_targets:
+    try:
+      s2_reach =  ReachableStatesE(s2)
+      objs = ReachableWriteObjects(s1,t)
+      for w in objs:
+        s2_reach_r = {s:s2_reach[s] for s in s2_reach if Read(s, w)}
+        if s2_reach_r != {}:
+          print("[!!] Indirect flow found for target {} on object {}".format(t, w))
+          print("     Traces for writing:")
+          i = 1
+          for ww in objs[w]: 
+            print "     [{}] ".format(i) + rbac_state(s1) +  traceToStringReverse(ww) 
+            i += 1
+          print("     Traces for reading:")
+          printReachableStatesE(s2_reach_r)
+    except KeyError:
+      pass
+
+def trace_to_perm(s, mode):
+  visited = {}
+  visited[s] = ( ('', s ), ) # tuple of labels (trace) to reach the state
+  result = {} # the executable objects with traces to reach them
+  todo = [((),s)] # the starting state with empty trace
+  while todo:
+    state = todo.pop() # we get one of the state to visit
+    # if we are looking for a read state and this one is a read state we change modality
+    objs = ObjectsWithPermissions(mode, state[1])
+    for oo in objs:
+      if oo not in result.keys(): # still empty write the empty set
+        result[oo] = set([])
+      # add the new state/path for the object
+      result[oo] |= set([visited[state[1]]])
+
+    toadd = [ss for ss in TransMap[state[1]] if ss[1] not in visited.keys() and eff_role([ss[1][0],ss[1][1],ss[1][2]]) not in b_roles]
+    todo += toadd
+    if toadd != []:
+      for st in toadd:
+        visited[st[1]] = visited[state[1]] + ((st[0],st[1]),) # keep track of the label
+  return result
+
+
+def flows_wx(s):
+  # we filter out blacklisted roles
+  if eff_role([s[0],s[1],s[2]]) in b_roles:
+    return
+
+  try:
+    result_w = trace_to_perm(s, 'w')
+    result_x = trace_to_perm(s, 'x')
+
+    for w in result_w.keys():
+      if w in result_x.keys():
+        print("[!!] Write-Execute flow found on object {}".format(w))
+        print("     Traces for writing:")
+        i = 1
+        for ww in result_w[w]: 
+          print "     [{}] ".format(i) + rbac_state(s) +  traceToStringReverse(ww) 
+          i += 1
+        print("     Traces for executing:")
+        i = 1
+        for xx in result_x[w]: 
+          print "     [{}] ".format(i) + rbac_state(s) +  traceToStringReverse(xx) 
+          i += 1
+  except KeyError:
+    pass
+    
+
+def to_state(state_list):
+  """Get a list such as state_list[] = [role_name, role_type, subject]"""
+
+  role_t = {'S': 0, 'U': 1, 'G': 2}
+  s = ['_','_','_',state_list[2]]
+  
+  try:
+    s[role_t[state_list[1]]] = state_list[0]
+  except KeyError:
+    pass
+
+  return tuple(s)
+
+def uniquify(l):
+  return list(set(l))
+
+opt_parser = argparse.ArgumentParser(description='a security analyser for Grsecurity RBAC policies.')
+opt_parser.add_argument('policy', type=str, help='policy file to be analyzed')
+opt_parser.add_argument('-a', '--admin', action='store_true', help='include administrative special roles in the analysis')
+opt_parser.add_argument('-b', '--bestcase', action='store_true', help='assume there are not setuid/setgid files in the system')
+opt_parser.add_argument('-p', '--processedpolicy', type=argparse.FileType('w'), help='write preprocessed policy to file, useful for debugging')
+opt_parser.add_argument('-e', '--entrypoints', type=argparse.FileType('r'), help='specify the entrypoints file')
+opt_parser.add_argument('-t', '--targets', type=argparse.FileType('r'), help='specify a file with sensitive targets')
+opt_parser.add_argument('-l', '--learnconfig', type=argparse.FileType('r'), help='specify the learn_config file to get sensitive targets')
+opt_parser.add_argument('-d', '--debug', action='store_true', help='enable debugging mode')
+opt_parser.add_argument('-v', '--version', action='version', version='%(prog)s-'+__version__)
+
+args = opt_parser.parse_args()
+
+DONTCARE = '_'
+sDONTCARE = set([DONTCARE])
+
+entry_points = []
+flow_targets = []
+targets = []
+
+if args.entrypoints:
+  ep = args.entrypoints
+  ep_r = ep.read()
+  entry_points = [to_state(s[0:3]) for s in re.findall("^\s*(\w+):([SUGD]):(\S+)\s*$", ep_r, flags = re.MULTILINE)]
+  flow_targets = [(to_state(s[0:3]), to_state(s[3:6]), s[6]) for s in re.findall("^\s*(\w+):([SUGD]):(\S+)\s+(\w+):([SUGD]):(\S+)\s+(\S+)\s*$", ep_r, flags = re.MULTILINE)]
+  ep.close()
+
+if args.learnconfig:
+  lc = args.learnconfig
+  targets += re.findall("^\s*(?:read|high)-protected-path\s+(\S+)", lc.read(), flags = re.MULTILINE)
+  lc.close()
+
+if args.targets:
+  ts = args.targets
+  targets += re.findall("^\s*(\S+)", ts.read(), flags = re.MULTILINE)
+  ts.close()
+
+entry_points = uniquify(entry_points)
+flow_targets = uniquify(flow_targets)
+targets = uniquify(targets)
+
+# get policy and preprocess it
+data = preprocess_policy(get_policy(args.policy))
+
+# save preprocessed policy to a file: useful for debugging the parser
+if args.processedpolicy:
+  args.processedpolicy.write(data)
+
+lexer = lex.lex(debug=args.debug)
+parser = yacc.yacc(debug=args.debug)
+
+print "Parsing the policy"
+result = parser.parse(data)
+
+perms = {}
+role_trans = {}
+user_trans = {}
+grp_trans = {}
+role_subj_cap = {}
+
+R = []             # the list of all roles
+S = []             # the list of all subjects
+O = []             # the list of all objects
+
+Radmin = set([])   # set of administrative roles (flag 'A')
+rU = set([])       # the set of user roles
+rG = set([])       # the set of group roles
+rS = set([])       # the set of special roles
+role_subjects = {} # a dictionary giving a dictionary of subject:mode for each role
+role_subject_objects = {} # a dictionary giving objects from (role,subject)
+role_subject_caps = {}
+
+print "Computing user/group roles"
+# Get role names as pairs and the sets of user/group roles
+for role in result:
+
+  t = re.match(r'[ugs]',role[1])
+
+  if not t: # default
+    if role[0] == 'default':
+      f = 'd'
+    else:
+      die("Role " + str(role[0]) + " has no type")
+  elif len(t.group(0)) > 1:
+    die("Role " + str(role[0]) + " has more than 1 type")    
+  else:
+    f = t.group(0)
+
+  if f == 'u':
+    rU |= set([role[0]])
+  elif f == 'g':
+    rG |= set([role[0]])
+  elif f == 's':
+    rS |= set([role[0]])
+
+  pair = (role[0],f)
+  R += [pair] # role is a pair (name,type)
+  role_trans[pair] = role[2]
+
+  if 'A' in role[1]: # administrative role
+    Radmin |= set([pair])
+
+# if we set -a from command line, initialize b_roles to the empty set,
+# otherwise fill it with administrative roles
+if args.admin:
+  b_roles = set([])
+else:
+  b_roles = Radmin
+
+print "Computing permissions"
+# builds the other sets
+for i in range(len(R)):
+  roleN = R[i]  
+  role = result[i]
+  role_subjects[roleN] = {}
+  for subject in role[3]:
+    # computes user transitions
+    if subject[1] == '':
+      # if unspecified all user roles + DONTCARE
+      user_trans[(roleN,subject[0])] = rU | sDONTCARE
+    elif subject[1][0] == 'user_transition_allow':
+      # with 'allow' we get the specified user roles
+      sint = subject[1][1] & rU
+      if sint != subject[1][1]:
+        # if some allowed user does not have a user role we add DONTCARE
+        sint |= sDONTCARE
+      user_trans[(roleN,subject[0])] = sint
+    elif subject[1][0] == 'user_transition_deny':
+      # with deny we get all possible user roles but those specified
+      user_trans[(roleN,subject[0])] = (rU | sDONTCARE) - subject[1][1]
+
+    # the same as for users is done for groups
+    if subject[2] == '':
+      grp_trans[(roleN,subject[0])] = rG | sDONTCARE
+    elif subject[2][0] == 'group_transition_allow':
+      sint = subject[2][1] & rG
+      if sint != subject[2][1]:
+        sint |= sDONTCARE
+      grp_trans[(roleN,subject[0])] = sint
+    elif subject[2][0] == 'group_transition_deny':
+      # with deny we get all possible group roles but those specified
+      grp_trans[(roleN,subject[0])] = (rG | sDONTCARE) - subject[2][1]
+
+    # we store subjects and realtive modes for each role
+    role_subjects[roleN][subject[0]] = subject[4]
+    # we store subjects names
+    S += [subject[0]]
+    # we store subjects and realtive capabilities for each role
+    role_subject_caps[(roleN,subject[0])] = subject[5]
+    role_subj_cap[(roleN,subject[0])] = set([])
+
+    # computes permissions
+    for object in subject[3]:
+      if object != '':
+        perms[roleN,subject[0],object[0]] = object[1]
+        O += [object[0]]
+
+print "Closing by inheritance"
+# Computes Inheritance
+perms = Inheritance(R,role_subjects,perms)
+print "   N. Permissions", len(perms)
+
+# Computes role_subject_objects AFTER inheritance
+for p in perms:
+  rs = (p[0],p[1]) # role-subject
+  if rs not in role_subject_objects:
+    role_subject_objects[rs] = set([p[2]])
+  else:
+    role_subject_objects[rs] |= set([p[2]])
+
+
+# We generate all the possible combinations, filtering out blacklisted roles
+States = set([])
+
+for u in rU | sDONTCARE:
+  for g in rG | sDONTCARE:
+    for r in (rS | sDONTCARE) - set([rA[0] for rA in b_roles]):
+      for subj in S:
+        States |= set([(r,u,g,subj)])
+
+InitialStates = States.copy()
+
+if not args.entrypoints:
+  entry_points = [s for s in States if s[3] == '/']
+
+print "Generating Transitions"
+# transitions are initially empty
+TransMap = {}
+NTransMap = 0
+
+newStates = States.copy()
+
+# We add role transition to DONTCARE to model special role exit
+for r in role_trans.keys():
+  role_trans[r] |= sDONTCARE
+
+# while we have something to process
+while newStates != set([]):
+  newStatesTmp = set([]) # the set of next new states
+  # adds the newStates into States
+  # States |= newStates
+  # for each new state we compute transitions and new states
+  for s in newStates:
+    # computes the effective role
+    role = eff_role([s[0],s[1],s[2]])
+    
+    # role transitions
+    for r in role_trans[role] - set([rA[0] for rA in b_roles]):
+      sp = (r,s[1],s[2],s[3])
+      if  sp not in States:
+        # new state
+        newStatesTmp |= set([sp])
+      if not s in TransMap:
+          TransMap[s] = []
+      TransMap[s].append(('set_role('+r+')',sp))
+      #TransMap |= set([(s,'set_role('+r+')', sp)])
+      NTransMap += 1
+
+    sc = match(s[3],role)
+
+    # user transitions
+    for u in user_trans[(role,sc)]:
+      if 'CAP_SETUID' in role_subj_cap[(role,sc)]:
+        #sp = (s[0],user_role(u),grp_role(grp[u]),s[3])
+        sp = (s[0],user_role(u),s[2],s[3])
+        if  sp not in States:
+          # new state
+          newStatesTmp |= set([sp])
+        if not s in TransMap:
+          TransMap[s] = []
+        TransMap[s].append(('set_UID('+u+')',sp))
+        NTransMap += 1
+
+  #      Trans |= set([(s,'set_UID('+u+')',sp)])
+      
+    # grp transitions
+    for g in grp_trans[(role,sc)]:
+      if 'CAP_SETGID' in role_subj_cap[(role,sc)]:
+        sp = (s[0],s[1],grp_role(g),s[3])
+        if  sp not in States:
+          # new state
+          newStatesTmp |= set([sp])
+        if not s in TransMap:
+          TransMap[s] = []
+        TransMap[s].append(('set_GID('+g+')',sp))
+        NTransMap += 1
+
+    # exec transitions
+    perms_rs = [p for p in perms.keys() if p[0]==role and p[1]==sc] # permissions for role and sc
+    #print perms_rs
+    objs = [pp[2] for pp in perms_rs if 'x' in perms[pp] and 'h' not in perms[pp]] # executable objects
+    #print "executable from",role,sc,":",objs
+    for o in objs:
+      for spp in ex_img(o,role,sc):
+        if args.bestcase:
+          sp = (s[0],s[1],s[2],spp)
+          if sp not in States:
+            # new state
+            newStatesTmp |= set([sp])
+          if not s in TransMap:
+            TransMap[s] = []
+          TransMap[s].append(("exec({})".format(o),sp))
+          NTransMap += 1
+        else:
+          # executing a set{u,g}id binary can change {u,g}id with no check on capabilities
+          for u in user_trans[(role,sc)] | set([s[1]]):
+            for g in grp_trans[(role,sc)] | set([s[2]]):
+              sp = (s[0],user_role(u),grp_role(g),spp)
+              #sp = (s[0],s[1],s[2],spp)
+              if sp not in States:
+                # new state
+                newStatesTmp |= set([sp])
+              if not s in TransMap:
+                TransMap[s] = []
+              TransMap[s].append(("exec({})".format(o),sp))
+              NTransMap += 1
+         
+  newStates = newStatesTmp
+
+print "   N. States", len(States)
+print "   N. Transitions", NTransMap
+
+object_with_read_permissions = {}
+object_with_write_permissions = {}
+for p in perms:
+  if (p[0],p[1]) not  in object_with_read_permissions:
+      object_with_read_permissions[(p[0],p[1])] = set([])
+  if (p[0],p[1]) not  in object_with_write_permissions:
+      object_with_write_permissions[(p[0],p[1])] = set([])
+  if 'r' in perms[p]:
+    object_with_read_permissions[(p[0],p[1])] |= set([p[2]])
+  if 'w' in perms[p] or 'a' in perms[p] or 'c' in perms[p]:
+    object_with_write_permissions[(p[0],p[1])] |= set([p[2]])
+
+if targets != [] and entry_points != []:
+  print("\nDIRECT FLOWS FOR READING")
+  print("========================\n")
+  direct_flows('r')
+  print("\nDIRECT FLOWS FOR WRITING")
+  print("========================\n")
+  direct_flows('w')
+
+if flow_targets != []:
+  print("\nINDIRECT FLOWS ANALYSIS")
+  print("=======================\n")
+  indirect_flows()
+
+if flow_targets != [] and entry_points != []:
+  print("\nWRITE-EXECUTE FLOWS ANALYSIS")
+  print("============================\n")
+  for s in entry_points:
+    flows_wx(s)
