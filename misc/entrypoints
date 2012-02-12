@@ -1,0 +1,6 @@
+default:U:/
+nobody:U:/
+root:U:/usr/sbin/cron		bob:U:/		/home/alice
+alice:U:/			bob:U:/		/home/alice
+alice:U:/
+bob:U:/
