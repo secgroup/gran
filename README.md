@@ -12,8 +12,8 @@ Gran, a security analyser for Grsecurity RBAC policies
 ### Usage
 
 	usage: gran [-h] [-a] [-b] [-p PROCESSEDPOLICY] [-e ENTRYPOINTS] [-t TARGETS]
-		    [-l LEARNCONFIG] [-d] [-v]
-		    policy
+	            [-l LEARNCONFIG] [-d] [-v]
+	            policy
 
 	a security analyser for Grsecurity RBAC policies.
 
