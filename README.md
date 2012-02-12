@@ -6,7 +6,8 @@ Gran, a security analyser for Grsecurity RBAC policies
 ### Requirements
 
 * Python 2.7 or grater (but not 3.X) 
-* [PLY][] module, available in most Linux distrubutions or by executing `easy_install ply`
+* [PLY][] module, available in most Linux distributions. It can also be
+  installed manually by executing `easy_install ply`
 
 ### Usage
 
@@ -35,26 +36,26 @@ Gran, a security analyser for Grsecurity RBAC policies
 	  -d, --debug           enable debugging mode
 	  -v, --version         show program's version number and exit
 
-Targets file consist of sensitive path, one entry per line. In case of no
+Targets file consists of sensitive path, one entry per line. In case of no
 targets specified, gran computes all the states and transitions and quits.
 
 
-Each line of entrypoints file has the following syntax:
+Each line of the entry-points file has the following syntax:
 
 	<stateA> [<stateB> <target>]
 
-with `stateA` and `stateB` triples in the form of
-`<role_name>:<type>:<subject>` and `target` a sensitive path that should not be
-leaked from stateA to stateB by an indirect flow.
+where `stateA` and `stateB` are triples of the form
+`<role_name>:<type>:<subject>` and `target` is a sensitive path that should not
+be leaked from stateA to stateB by an indirect flow.
 
-If no entrypoints file is provided, gran assumes all the roles in the policy
+If no entry-points file is provided, gran assumes all the roles in the policy
 file paired with the default subject '/' as entry points.
 
-Examples of targets and entrypoints files can be found under `misc/`.
+Examples of targets and entry-points files can be found under `misc/`.
 
 ### Limitations
 
-At the moment, the following RBAC features are supported:
+At the moment, the following Grsecurity RBAC features are supported:
 
 * role modes: `u`, `g`, `s`, `A`
 * role attributes: `role_transitions`
