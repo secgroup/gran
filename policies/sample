@@ -1,0 +1,174 @@
+define standard_env {
+	/				h
+	/bin				x
+	/dev				h
+	/dev/null			w
+	/dev/tty			rw
+	/etc				r
+	/etc/grsec			h
+	/etc/shadow			h
+	/etc/ssh			h
+	/home				
+	/lib				rx
+	/lib/modules			h
+	/proc/meminfo			r
+	/usr				h
+	/usr/bin			
+	/usr/lib			rx
+	/usr/share			h
+	/usr/share/terminfo		r
+}
+
+role admin sA
+subject / rvka
+	/ rwcdmlxi
+
+role default
+subject /
+	/			h
+	-CAP_ALL
+
+role root uG
+role_transitions admin
+subject /  {
+	/				h
+	/bin				h
+	/bin/bash			x
+	/dev				h
+	/dev/initctl			
+	/dev/null			w
+	/dev/tty			rw
+	/etc				r
+	/etc/grsec			h
+	/etc/shadow			h
+	/etc/ssh			h
+	/home				h
+	/lib				rx
+	/lib/modules			h
+	/proc				h
+	/proc/meminfo			r
+	/root				
+	/sbin				h
+	/sbin/gradm			x
+	/tmp				w
+	-CAP_ALL
+}
+subject /bin/su o {
+	/				h
+	/bin/bash			x
+	/dev/log			rw
+	-CAP_ALL
+}
+subject /usr/sbin/metalog o {
+	/				h
+	/etc/localtime			
+	/var/log/pwdfail		rwcd
+}
+subject /usr/sbin/sshd o {
+	/				
+	/bin				h
+	/bin/bash			x
+	/boot				h
+	/dev				rw
+	/etc				r
+	/etc/grsec			h
+	/lib				rx
+	/lib/modules			h
+	/proc				w
+	/sys				h
+	/usr				h
+	/usr/lib			rx
+	/usr/sbin/sshd			x
+	/var				h
+	/var/empty			
+	/var/log			rw
+	/var/run			rw
+}
+subject /usr/sbin/cron o {
+user_transition_allow alice
+group_transition_allow users
+
+	/				h
+	/dev/log			rw
+	/etc				r
+	/etc/grsec			h
+	/etc/ssh			h
+	/lib				rx
+	/lib/modules			h
+	/proc				h
+	/proc/sys/kernel/ngroups_max	r
+	/usr				h
+	/usr/sbin/cron			rx
+	/var/spool/cron/crontabs	
+}
+
+role walter u
+subject / o {
+	$standard_env
+	/home/walter			r
+	-CAP_ALL
+}
+subject /bin/su o {
+user_transition_allow root
+group_transition_allow root
+
+	/				h
+	/bin				h
+	/bin/su				rx
+	/dev				h
+	/dev/log			rw
+	/dev/pts			
+	/etc				r
+	/etc/grsec			h
+	/etc/ssh			h
+	/lib				rx
+	/lib/modules			h
+	/proc				r
+	/proc/bus			h
+	/proc/kallsyms			h
+	/proc/kcore			h
+	/proc/modules			h
+	/proc/slabinfo			h
+	/var/run/utmp			r
+	-CAP_ALL
+	+CAP_SETGID
+	+CAP_SETUID
+}
+
+role alice u
+subject / o {
+	$standard_env
+	/home/alice			rwcd
+	-CAP_ALL
+}
+subject /usr/bin {
+	/usr/bin			rx
+}
+subject /usr/sbin/cron {
+	/usr/bin			rx
+}
+subject /usr/bin/python2.7 o {
+	/				h
+	/etc/ld.so.cache		r
+	/proc/meminfo			r
+	/tmp				rwc
+	/home
+	/home/alice/bin			r
+	/lib				rx
+	/usr				
+	/usr/bin/python2.7		rx
+	/usr/include/python2.7		r
+	/usr/lib			rx
+	-CAP_ALL
+}
+
+role bob u
+subject / o {
+	$standard_env
+	/home/bob			r
+	-CAP_ALL
+}
+subject /bin/bash {
+	/tmp				rwcd
+	/home/bob			rwcd
+}

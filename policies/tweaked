@@ -1,0 +1,584 @@
+# policy generated from full system learning
+
+define grsec_denied {
+	/boot	h
+	/dev/grsec	h
+	/dev/kmem	h
+	/dev/mem	h
+	/dev/port	h
+	/etc/grsec	h
+	/proc/kcore	h
+	/proc/slabinfo	h
+	/proc/modules	h
+	/proc/kallsyms	h
+	/lib/modules	hs
+	/etc/ssh	h
+}
+
+role admin sA
+subject / rvka
+	/ rwcdmlxi
+
+role shutdown sARG
+subject / rvka
+	/
+	/dev
+	/dev/urandom r
+	/dev/random r
+	/etc r
+	/bin rx
+	/sbin rx
+	/lib rx
+	/usr rx
+	/proc r
+	$grsec_denied
+	-CAP_ALL
+	connect disabled
+	bind disabled
+
+role default
+subject /
+	/			h
+	-CAP_ALL
+	connect	disabled
+	bind	disabled
+
+role root uG
+role_transitions admin shutdown
+# Role: root
+subject /  {
+	/				
+	/bin				x
+	/boot				h
+	/dev				h
+	/dev/initctl			
+	/dev/null			w
+	/dev/tty			rw
+	/etc				r
+	/etc/grsec			h
+	/etc/shadow			h
+	/etc/shadow-			h
+	/etc/ssh			h
+	/lib				rx
+	/lib/modules			h
+	/proc				h
+	/proc/meminfo			r
+	/sbin				h
+	/sbin/gradm			x
+	/sys				h
+	/usr				h
+	/usr/bin/dircolors		x
+	/usr/bin/find			x
+	/usr/sbin/run-crons		rx
+	/usr/share/terminfo		r
+	/var				
+	/var/backups			h
+	/var/log			h
+	/var/spool			
+	/var/spool/cron			
+	-CAP_ALL
+	bind	disabled
+	connect	disabled
+}
+
+# Role: root
+subject /bin/ln o {
+	/				h
+	/bin				h
+	/bin/ln				x
+	/etc				h
+	/etc/ld.so.cache		r
+	/lib				x
+	/var				h
+	/var/spool/cron/lastrun/lock	wc
+	-CAP_ALL
+	bind	disabled
+	connect	disabled
+}
+
+# Role: root
+subject /bin/rm o {
+	/				h
+	/bin				h
+	/bin/rm				x
+	/etc				h
+	/etc/ld.so.cache		r
+	/lib				x
+	/var				h
+	/var/spool/cron/lastrun		wd
+	-CAP_ALL
+	bind	disabled
+	connect	disabled
+}
+
+# Role: root
+subject /bin/su o {
+	/				h
+	/bin/bash			x
+	/dev/log			rw
+	/root				
+	-CAP_ALL
+	bind	disabled
+	connect	disabled
+}
+
+# Role: root
+subject /bin/touch o {
+	/				h
+	/bin				h
+	/bin/touch			x
+	/etc				h
+	/etc/ld.so.cache		r
+	/lib				rx
+	/lib/modules			h
+	/var				h
+	/var/spool/cron/lastrun		wc
+	-CAP_ALL
+	bind	disabled
+	connect	disabled
+}
+
+# Role: root
+subject /usr/sbin/apache2 o {
+user_transition_allow apache
+group_transition_allow apache
+
+	/				h
+	/etc/group			r
+	/proc/sys/kernel/ngroups_max	r
+	-CAP_ALL
+	+CAP_SETGID
+	+CAP_SETUID
+	bind	disabled
+	connect	disabled
+}
+
+# Role: root
+subject /usr/sbin/cron o {
+user_transition_allow alice bob root
+group_transition_allow users root
+
+	/				
+	/bin				h
+	/bin/bash			x
+	/boot				h
+	/dev/grsec			h
+	/dev/kmem			h
+	/dev/log			h
+	/dev/mem			h
+	/dev/port			h
+	/etc				r
+	/etc/grsec			h
+	/etc/shadow-			h
+	/etc/ssh			h
+	/lib				rx
+	/lib/modules			h
+	/proc				h
+	/proc/sys/kernel/ngroups_max	r
+	/sys				h
+	/usr/src			h
+	/var				h
+	/var/spool/cron/crontabs	r	
+	-CAP_ALL
+	+CAP_DAC_READ_SEARCH
+	+CAP_SETGID
+	+CAP_SETUID
+	bind	disabled
+	connect	disabled
+}
+
+# Role: root
+subject /usr/sbin/metalog o {
+	/				h
+	/etc/localtime			
+	-CAP_ALL
+	+CAP_SYSLOG
+	bind	disabled
+	connect	disabled
+}
+
+# Role: root
+subject /usr/sbin/sshd o {
+group_transition_allow sshd users root
+
+	/				
+	/bin				h
+	/bin/bash			
+	/boot				h
+	/dev				h
+	/dev/log			rw
+	/dev/null			rw
+	/dev/ptmx			rw
+	/dev/pts			rw
+	/dev/urandom			r
+	/etc				r
+	/etc/grsec			h
+	/etc/shadow-			h
+	/lib				rx
+	/lib/modules			h
+	/proc				w
+	/proc/bus			h
+	/proc/kallsyms			h
+	/proc/kcore			h
+	/proc/modules			h
+	/proc/slabinfo			h
+	/proc/sys/kernel/ngroups_max	r
+	/sys				h
+	/usr				h
+	/usr/lib			rx
+	/usr/sbin/sshd			x
+	/var				h
+	/var/empty			
+	/var/log			rw
+	/var/run			rw
+	-CAP_ALL
+	+CAP_CHOWN
+	+CAP_SETGID
+	+CAP_SETUID
+	+CAP_SYS_CHROOT
+	+CAP_AUDIT_CONTROL
+}
+
+# Role: root
+subject /usr/sbin/vboxguest-service o {
+	/				h
+	/var/run/utmp			r
+	-CAP_ALL
+	bind 0.0.0.0/32:0 dgram ip
+	connect	disabled
+}
+
+role apache u
+# Role: apache
+subject /  {
+	/				h
+	-CAP_ALL
+	bind	disabled
+	connect	disabled
+}
+
+# Role: apache
+subject /usr/sbin/apache2 o {
+	/				
+	/boot				h
+	/dev/grsec			h
+	/dev/kmem			h
+	/dev/log			h
+	/dev/mem			h
+	/dev/port			h
+	/etc/grsec			h
+	/etc/passwd			h
+	/etc/shadow			h
+	/etc/shadow-			h
+	/etc/ssh			h
+	/lib/modules			h
+	/proc/bus			h
+	/proc/kallsyms			h
+	/proc/kcore			h
+	/proc/modules			h
+	/proc/slabinfo			h
+	/proc/sys			h
+	/sys				h
+	/usr/src			h
+	/var				
+	/var/backups			h
+	/var/log			h
+	/var/www			rw
+	-CAP_ALL
+	bind	disabled
+	connect	disabled
+}
+
+role sshd u
+# Role: sshd
+subject /  {
+	/				h
+	-CAP_ALL
+	bind	disabled
+	connect	disabled
+}
+
+role alice u
+# Role: alice
+subject /  {
+	/				
+	/bin				x
+	/boot				h
+	/dev				h
+	/dev/null			w
+	/dev/pts			rw
+	/dev/tty			rw
+	/etc				r
+	/etc/grsec			h
+	/etc/shadow			h
+	/etc/shadow-			h
+	/etc/ssh			h
+	/home				
+	/home/alice			rwcd
+	/lib				rx
+	/lib/modules			h
+	/proc				r
+	/proc/bus			h
+	/proc/kallsyms			h
+	/proc/kcore			h
+	/proc/modules			h
+	/proc/slabinfo			h
+	/sbin				h
+	/sbin/killall5			
+	/sbin/rc			
+	/sys				h
+	/tmp				r
+	/usr				
+	/usr/bin			rx
+	/usr/i686-pc-linux-gnu		x
+	/usr/include			r
+	/usr/lib			rx
+	/usr/libexec			h
+	/usr/libexec/gcc/i686-pc-linux-gnu	x
+	/usr/local			
+	/usr/local/bin			
+	/usr/sbin
+	/usr/sbin/ssmtp			
+	/usr/share			r
+	/usr/src			h
+	/var				h
+	/var/run/utmp			r
+	-CAP_ALL
+	bind	disabled
+	connect	disabled
+}
+
+# Role: alice
+subject /bin/passwd o {
+	/				h
+	/bin				h
+	/bin/passwd			x
+	/dev				h
+	/dev/log			rw
+	/dev/urandom			r
+	/etc				rwcd
+	/etc/grsec			h
+	/etc/pam.d			r
+	/etc/shadow-			h
+	/etc/ssh			h
+	/lib				rx
+	/lib/modules			h
+	/proc				r
+	/proc/bus			h
+	/proc/kallsyms			h
+	/proc/kcore			h
+	/proc/modules			h
+	/proc/slabinfo			h
+	/proc/sys			h
+	/usr				h
+	/usr/lib			r
+	-CAP_ALL
+	+CAP_CHOWN
+	+CAP_FSETID
+	+CAP_SYS_RESOURCE
+	bind	disabled
+	connect	disabled
+}
+
+# Role: alice
+subject /usr/bin/crontab o {
+	/				h
+	/bin				h
+	/bin/bash			x
+	/dev				h
+	/dev/log			rw
+	/etc				h
+	/etc/cron.deny			r
+	/etc/ld.so.cache		r
+	/etc/localtime			r
+	/etc/nsswitch.conf		r
+	/etc/passwd			r
+	/lib				rx
+	/lib/modules			h
+	/tmp				rwcd
+	/usr				h
+	/usr/bin/crontab		x
+	/var				h
+	/var/spool/cron			
+	/var/spool/cron/crontabs	rwcd
+	-CAP_ALL
+	bind	disabled
+	connect	disabled
+}
+
+role bob u
+# Role: bob
+subject /  {
+	/				
+	/bin				x
+	/boot				h
+	/dev				h
+	/dev/null			w
+	/dev/pts			rw
+	/dev/tty			rw
+	/etc				r
+	/etc/grsec			h
+	/etc/shadow			h
+	/etc/shadow-			h
+	/etc/ssh			h
+	/home				
+	/home/bob			rwcd
+	/lib				rx
+	/lib/modules			h
+	/proc				r
+	/proc/bus			h
+	/proc/kallsyms			h
+	/proc/kcore			h
+	/proc/modules			h
+	/proc/slabinfo			h
+	/sbin				h
+	/sbin/killall5			
+	/sbin/rc			
+	/sys				h
+	/tmp				r
+	/usr				
+	/usr/bin			rx
+	/usr/i686-pc-linux-gnu		x
+	/usr/include			r
+	/usr/lib			rx
+	/usr/libexec			h
+	/usr/libexec/gcc/i686-pc-linux-gnu	x
+	/usr/local			
+	/usr/local/bin			
+	/usr/sbin
+	/usr/sbin/ssmtp			
+	/usr/share			r
+	/usr/src			h
+	/var				h
+	/var/run/utmp			r
+	-CAP_ALL
+	bind	disabled
+	connect	disabled
+}
+
+# Role: bob
+subject /bin/passwd o {
+	/				h
+	/bin				h
+	/bin/passwd			x
+	/dev				h
+	/dev/log			rw
+	/dev/urandom			r
+	/etc				rwcd
+	/etc/grsec			h
+	/etc/pam.d			r
+	/etc/shadow-			h
+	/etc/ssh			h
+	/lib				rx
+	/lib/modules			h
+	/proc				r
+	/proc/bus			h
+	/proc/kallsyms			h
+	/proc/kcore			h
+	/proc/modules			h
+	/proc/slabinfo			h
+	/proc/sys			h
+	/usr				h
+	/usr/lib			r
+	-CAP_ALL
+	+CAP_CHOWN
+	+CAP_FSETID
+	+CAP_SYS_RESOURCE
+	bind	disabled
+	connect	disabled
+}
+
+# Role: bob
+subject /usr/bin/crontab o {
+	/				h
+	/bin				h
+	/bin/bash			x
+	/dev				h
+	/dev/log			rw
+	/etc				h
+	/etc/cron.deny			r
+	/etc/ld.so.cache		r
+	/etc/localtime			r
+	/etc/nsswitch.conf		r
+	/etc/passwd			r
+	/lib				rx
+	/lib/modules			h
+	/tmp				rwcd
+	/usr				h
+	/usr/bin/crontab		x
+	/var				h
+	/var/spool/cron			
+	/var/spool/cron/crontabs	rwcd
+	-CAP_ALL
+	bind	disabled
+	connect	disabled
+}
+
+role walter u
+# Role: walter
+subject /  {
+	/				h
+	/bin				h
+	/bin/bash			x
+	/bin/su				x
+	/dev				h
+	/dev/null			w
+	/dev/pts			rw
+	/dev/tty			rw
+	/etc				r
+	/etc/grsec			h
+	/etc/shadow			h
+	/etc/shadow-			h
+	/etc/ssh			h
+	/home				h
+	/home/walter			r
+	/lib				rx
+	/lib/modules			h
+	/proc				
+	/proc/bus			h
+	/proc/kallsyms			h
+	/proc/kcore			h
+	/proc/meminfo			r
+	/proc/modules			h
+	/proc/slabinfo			h
+	/proc/sys			h
+	/usr				h
+	/usr/bin/clear			x
+	/usr/bin/dircolors		x
+	/usr/share/terminfo		r
+	-CAP_ALL
+	bind	disabled
+	connect	disabled
+}
+
+# Role: walter
+subject /bin/su o {
+user_transition_allow root
+group_transition_allow root
+
+	/				h
+	/bin				h
+	/bin/su				x
+	/dev				h
+	/dev/log			rw
+	/dev/pts			
+	/etc				r
+	/etc/grsec			h
+	/etc/shadow-			h
+	/etc/ssh			h
+	/lib				rx
+	/lib/modules			h
+	/proc				r
+	/proc/bus			h
+	/proc/kallsyms			h
+	/proc/kcore			h
+	/proc/modules			h
+	/proc/slabinfo			h
+	/var				h
+	/var/run/utmp			r
+	-CAP_ALL
+	+CAP_SETGID
+	+CAP_SETUID
+	bind	disabled
+	connect	disabled
+}
