@@ -35,9 +35,22 @@ Gran, a security analyser for Grsecurity RBAC policies
 	  -d, --debug           enable debugging mode
 	  -v, --version         show program's version number and exit
 
+Targets file consist of sensitive path, one entry per line. In case of no
+targets specified, gran computes all the states and transitions and quits.
+
+
+Each line of entrypoints file has the following syntax:
+
+	<stateA> [<stateB> <target>]
+
+with `stateA` and `stateB` triples in the form of
+`<role_name>:<type>:<subject>` and `target` a sensitive path that should not be
+leaked from stateA to stateB by an indirect flow.
+
 If no entrypoints file is provided, gran assumes all the roles in the policy
-file paired with the default subject '/' as entry points. In case of no targets
-specified, gran computes all the states and transitions and quits.
+file paired with the default subject '/' as entry points.
+
+Examples of targets and entrypoints files can be found under `misc/`.
 
 ### Limitations
 
@@ -54,6 +67,5 @@ At the moment, the following RBAC features are supported:
 The tool provides a limited support for wild-carded objects. Nested subjects
 are not supported, since the learning system of Grsecurity does not account for
 them.
-
 
 [PLY]:   http://www.dabeaz.com/ply/
