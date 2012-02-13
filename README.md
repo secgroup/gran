@@ -24,9 +24,6 @@ Gran, a security analyser for Grsecurity RBAC policies
 	  -h, --help            show this help message and exit
 	  -a, --admin           include administrative special roles in the analysis
 	  -b, --bestcase        assume there are not setuid/setgid files in the system
-	  -p PROCESSEDPOLICY, --processedpolicy PROCESSEDPOLICY
-				write preprocessed policy to file, useful for
-				debugging
 	  -e ENTRYPOINTS, --entrypoints ENTRYPOINTS
 				specify the entrypoints file
 	  -t TARGETS, --targets TARGETS

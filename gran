@@ -863,7 +863,7 @@ opt_parser = argparse.ArgumentParser(description='a security analyser for Grsecu
 opt_parser.add_argument('policy', type=str, help='policy file to be analyzed')
 opt_parser.add_argument('-a', '--admin', action='store_true', help='include administrative special roles in the analysis')
 opt_parser.add_argument('-b', '--bestcase', action='store_true', help='assume there are not setuid/setgid files in the system')
-opt_parser.add_argument('-p', '--processedpolicy', type=argparse.FileType('w'), help='write preprocessed policy to file, useful for debugging')
+opt_parser.add_argument('-p', '--processedpolicy', type=argparse.FileType('w'), help=argparse.SUPPRESS)
 opt_parser.add_argument('-e', '--entrypoints', type=argparse.FileType('r'), help='specify the entrypoints file')
 opt_parser.add_argument('-t', '--targets', type=argparse.FileType('r'), help='specify a file with sensitive targets')
 opt_parser.add_argument('-l', '--learnconfig', type=argparse.FileType('r'), help='specify the learn_config file to get sensitive targets')
