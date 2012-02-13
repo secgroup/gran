@@ -2,15 +2,6 @@
 
 """Security analyser for Grsecurity RBAC policies."""
 
-__authors__     = ["Michele Bugliesi <michele at dais.unive.it>",
-                   "Stefano Calzavara <calzavara at dais.unive.it>",
-                   "Riccardo Focardi <focardi at dais.unive.it>",
-                   "Marco Squarcina <msquarci at dais.unive.it>"]
-__license__     =  "MIT"
-__copyright__   =  "Copyright 2012, University of Venice"
-__status__      =  "Development"
-__version__     =  "0.1"
-
 import sys
 import os
 import glob
@@ -23,6 +14,15 @@ try:
   import ply.yacc as yacc
 except ImportError:
   die("Module PLY not found.")
+
+__authors__     = ["Michele Bugliesi <michele at dais.unive.it>",
+                   "Stefano Calzavara <calzavara at dais.unive.it>",
+                   "Riccardo Focardi <focardi at dais.unive.it>",
+                   "Marco Squarcina <msquarci at dais.unive.it>"]
+__license__     =  "MIT"
+__copyright__   =  "Copyright 2012, University of Venice"
+__status__      =  "Development"
+__version__     =  "0.1"
 
 # RBAC policy parser
 
@@ -78,8 +78,6 @@ t_RES = r'RES_[A-Z_]*'
 t_LIMIT = r'[0-9]+[a-zA-Z]?' # a number followed by an optional single char (the unit)
 t_NUMBER = r'[0-9]+'
 t_IP_ADDRESS = r'[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+'
-#t_PATH = r'(/([a-zA-Z][a-zA-Z_\-0-9]*)*)+'
-#t_OPATH = r'(/([a-zA-Z\.\*_][a-zA-Z_\-\.\*\?0-9]*)*)+'
 t_OPATH = r'(/[\w\.\*\?\-\+\_]*)+'
 t_PORT = r':[0-9]+(\-[0-9]+)?'
 
@@ -94,11 +92,6 @@ def t_ID(t):
     t.type = reserved.get(t.value,'ID')    # Check for reserved words
     return t
 
-# def t_ROLE_MODE_PLUS(t):
-#     r'[ugsAGINPTR]+'
-#     return t
-
-
 t_ignore = ' \t'
 
 def t_newline(t):
@@ -108,21 +101,6 @@ def t_newline(t):
 def t_error(t):
     print("Illegal character {} at line {}".format(t.value[0] , t.lexer.lineno))
     t.lexer.skip(1)
-
-
-# # Test it out
-# data = '''role pippo subject connect u connect'''
-
-# print data
-
-# # Give the lexer some input
-# lexer.input(data)
-
-# # Tokenize
-# while True:
-#     tok = lexer.token()
-#     if not tok: break      # No more input
-#     print tok
 
 def p_error(p):
     die("Syntax error at token '" + str(p.type) + "', value: '" + str(p.value) + "' line: " + str(p.lineno))
@@ -160,7 +138,7 @@ def p_role_definition(t):
 def p_role_allow_ip(t):
     '''role_allow_ip : ROLE_ALLOW_IP IP_ADDRESS cidr_netmask role_allow_ip
                      | empty'''
-    # manca netmask facoltativa qui sopra
+    # missing optional netmask here
 
 def p_role_transitions(t):
     '''role_transitions : ROLE_TRANSITIONS ids role_transitions
@@ -204,7 +182,7 @@ def p_right(t):
              | empty '''
     
        
-# Here Spender EBNF seems wrong
+# Here EBNF on the wiki seems wrong
 def p_subject_paths(t):
     '''subject_paths : subject_path ':' subject_paths
                      | subject_path '''
@@ -216,9 +194,6 @@ def p_subject_paths(t):
 # I'm admitting wildcards here....
 def p_subject_path(t):
   '''subject_path : OPATH '''
-#     '''subject_path : '/'
-#                     | '/' ID
-#                     | '/' ID subject_path '''
   t[0] = t[1]
 
 def p_subject_modes(t):
@@ -238,31 +213,11 @@ def p_file_definition(t):
     '''file_definition : OPATH oid'''
     t[0] = [t[1],t[2]]
 
-# def p_capability_definitions(t):
-#     '''capability_definitions : capability_definition capability_definitions
-#                               | empty'''
-
-#def p_capability_definition(t):
-#    '''capability_definition : CAPABILITY'''
-
-
-# def p_resource_definitions(t):
-#     '''resource_definitions : resource_definition  resource_definitions
-#                             | empty'''
-
 def p_resource_definition(t):
     '''resource_definition : RESOURCE LIMIT LIMIT'''
 
-# def p_pax_flag_definitions(t):
-#     '''pax_flag_definitions : pax_flag_definition  pax_flag_definitions
-#                               | empty'''
-
 def p_pax_flag_definition(t):
     '''pax_flag_definition : PAX_FLAG'''
-
-# def p_ip_acl_definitions(t):
-#     '''ip_acl_definitions : ip_acl_definition ip_acl_definitions
-#                               | empty'''
 
 def p_ip_acl_definition(t):
     '''ip_acl_definition : CONNECT DISABLED
@@ -309,9 +264,6 @@ def p_user_transitions(t):
 def p_user_transition(t):
     '''user_transition : USER_TRANSITION_ALLOW ids 
                        | USER_TRANSITION_DENY  ids'''
-#    if len(t) > 2 and t[2] & set(users) != t[2]:
-#      print "Warning: allowing/denying non-existent users", t[2] - setusers
-
     t[0] = [t[1],t[2]]
     
 # skip this for the moment
@@ -331,8 +283,6 @@ def p_group_transitions(t):
 def p_group_transition(t):
     '''group_transition : GROUP_TRANSITION_ALLOW ids
                        |  GROUP_TRANSITION_DENY  ids'''
-#    if len(t) > 2 and t[0] & t[2] != t[2]:
-#      print "Warning: allowing/denying non-existent groups", t[2] - setgroups
     t[0] = [t[1],t[2]]
 
 
@@ -406,10 +356,11 @@ def get_policy(fname):
 
     return policy
 
-# Finds if p2 matches p1, which may contain wildcards
-# We have checked that trailing / is interpreted as expected: as a directory
-# thus /usr/bin/cat does not match /usr/bin/cat/
 def pathmatch(p1,p2):
+  """Finds if p2 matches p1, which may contain wildcards. We have checked that
+  trailing / is interpreted as expected: as a directory thus /usr/bin/cat does
+  not match /usr/bin/cat/."""
+
   if p1 == '/':
     pp1 = [''] #special case for '/'. To avoid it is represented as ['','']
   else:
@@ -433,18 +384,20 @@ def pathmatch(p1,p2):
 #      else:
 #        return True
 
-# finds the greatest matching path for p in set s
 def GMP(s,p):
+  """Finds the greatest matching path for p in set s."""
+
   matching = [x for x in s if pathmatch(x,p)]
   if matching == []:
     return None
   else:
     return max(matching,key=len)
 
-# recursively computes the 'closure' of subject permissions wrt inheritance
-# takes a dictionary that for each role gives a set of (subject,mode) and the permissions
-# returns the new permissions # add role_subj_cap
 def Inheritance(R,rs,perm):
+  """Recursively computes the 'closure' of subject permissions wrt inheritance
+  takes a dictionary that for each role gives a set of (subject,mode) and the
+  permissions returns the new permissions."""
+
   for r in R: # for any role
     rs_cap_todo = [x for x in rs[r].keys() if 'o' in rs[r][x]]
     for s in rs_cap_todo:
@@ -486,8 +439,9 @@ def beautyPrint(perms,R,rs,O):
         if (r,s,o) in perms:
           print("     {} \t\t\t".format(perms[r,s,o]))
         
-# sums-up capabilities
 def cap_compute(rsc):
+  """Sums-up capabilities."""
+
   allCaps = set(['CAP_SETGID','CAP_SETUID'])
   caps =  allCaps.copy() # by default we give both
   for d in rsc:
@@ -503,6 +457,8 @@ def cap_compute(rsc):
 
 # this is eff_role directly on a state
 def s_eff_role(s):
+  """Computes eff_role directly on a state."""
+
   return eff_role([s[0],s[1],s[2]])
 
 def eff_role(rl):
@@ -599,27 +555,27 @@ def printTransMap(loops):
         j+=1
     i+=1
 
-# list objects from state information (role + subject)
 def StateObjects(s):
+  """List objects from state information (role + subject)."""
+
   role = s_eff_role(s) # effective role
   return role_subject_objects[role,match(s[3],role)]
 
-# returns a list of states in States with permission pe on file t
 def StatesWithPermissions(pe,t):
+  """Returns a list of states in States with permission pe on file t."""
+
   readPermissions = [p for p in perms.keys() if p[2] == t and pe in perms[p] ]
   return [s for s in States for p in readPermissions if eff_role([s[0],s[1],s[2]]) == p[0] and p[1] == match(s[3],p[0]) ]
 
-# returns the string of permissions in state s on t
 def PermissionInState(s,t):
-  role = eff_role([s[0],s[1],s[2]])
-  #result = [perms[p] for p in perms.keys() if p[0]==role and p[1] == match(s[3],role) and p[2] == t]
-  return perms[(role,match(s[3],role),t)]
-  # if result == []:
-  #   print "\nLista vuota??", s,t, StateObjects(s)
-  # return result[0]
+  """Returns the string of permissions in state s on t."""
 
-# returns the objects with permission pe in state s
+  role = eff_role([s[0],s[1],s[2]])
+  return perms[(role,match(s[3],role),t)]
+
 def ObjectsWithPermissions(pe,s):
+  """Returns the objects with permission pe in state s."""
+
   role = eff_role([s[0],s[1],s[2]])
   result = [p[2] for p in perms.keys() if p[0]==role and p[1] == match(s[3],role) and pe in perms[p]]
   return result
@@ -632,8 +588,9 @@ def ObjectsWithReadPermissions(s):
   role = eff_role([s[0],s[1],s[2]])
   return object_with_read_permissions[role,match(s[3],role)]
 
-# reachable states not through the list of blacklisted roles
 def ReachableStates(s):
+  """Reachable states not through the list of blacklisted roles."""
+
   if eff_role([s[0],s[1],s[2]]) in b_roles:
     return set([])
 
@@ -671,8 +628,9 @@ def ReachableStatesE(s):
        visited[st[1]] = visited[state[1]] + ((state[1],st[0]),) # keep track of the label
   return visited
   
-# computes all the object that are writable after having read the target, starting from s
 def ReachableWriteObjects(s,target):
+  """Computes all the object that are writable after having read the target, starting from s."""
+
   # we filter out blacklisted roles
   if eff_role([s[0],s[1],s[2]]) in b_roles:
     return {}
