@@ -417,6 +417,7 @@ def Inheritance(R,rs,perm):
       #
       ip = perms.keys()
       # copy caps from parent to child (inheritance) recalculating them
+      role_subject_caps[(r, s)] = role_subject_caps[(r, parent)] + role_subject_caps[(r, s)]
       role_subj_cap[(r, s)] = cap_compute(role_subject_caps[(r, parent)] + role_subject_caps[(r, s)])
       parent_perms = [x for x in ip if x[0]==r and x[1]==parent and (x[0],s,x[2]) not in ip ]
       for pp in parent_perms:
