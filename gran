@@ -575,9 +575,8 @@ def traceToStringReverse(trace):
     
 def printReachableStatesE(TraceStates):
   i = 1
-  # this is lexicographic on the traces!
-  #for s, trace in sorted(TraceStates.iteritems(), key=lambda (k,v): (v,k)):
-  for s, trace in sorted(TraceStates.items(), key=lambda k: len(k)):
+  # order by number of states in the trace and then by number of characters
+  for s, trace in sorted(TraceStates.items(), key=lambda x: (len(x[1]),len(str(x)))):
     print("     [{}] {}{}".format(i, traceToString(trace), rbac_state(s)))
     i += 1
 
