@@ -11,7 +11,12 @@ __copyright__   =  "Copyright 2012, University of Venice"
 __status__      =  "Development"
 __version__     =  "0.1"
 
-import re, fnmatch, sys, pwd, grp, os, glob, argparse
+import sys
+import os
+import glob
+import re
+import fnmatch
+import argparse
 
 try:
   import ply.lex as lex
@@ -101,7 +106,7 @@ def t_newline(t):
     t.lexer.lineno += t.value.count("\n")
 
 def t_error(t):
-    print("Illegal character '%s' at line %i" % (t.value[0] , t.lexer.lineno)) 
+    print("Illegal character {} at line {}".format(t.value[0] , t.lexer.lineno))
     t.lexer.skip(1)
 
 
@@ -204,7 +209,7 @@ def p_subject_paths(t):
     '''subject_paths : subject_path ':' subject_paths
                      | subject_path '''
     if len(t)==3:
-      print ("[ Line ",t.lexer.lineno,"] Sorry, nested path are not supported at the moment")
+      print ("[Line {}] Sorry, nested path are not supported at the moment".format(t.lexer.lineno))
       exit(1)
     t[0] = t[1]
 
@@ -472,14 +477,14 @@ def beautyPrint(perms,R,rs,O):
   O = [o for o in O]
   O.sort(key=len)
   for r in R:
-    print "Role",r
+    print("Role {}".format(r))
     sub = [x for x in rs[r].keys()]
     sub.sort(key=len)
     for s in sub:
-      print "  Subject",s
+      print("  Subject {}".format(s))
       for o in O:
         if (r,s,o) in perms:
-          print "    ",o,"\t\t\t", perms[r,s,o]
+          print("     {} \t\t\t".format(perms[r,s,o]))
         
 # sums-up capabilities
 def cap_compute(rsc):
@@ -552,15 +557,7 @@ def rbac_state(s):
 def printStates(States):
   i = 1
   for s in States:
-    print i , "] ", rbac_state(s)
-    i += 1
-
-def printReachableStates(TraceStates):
-  i = 1
-  # this is lexicographic on the traces!
-  #for s, trace in sorted(TraceStates.iteritems(), key=lambda (k,v): (v,k)):
-  for s, trace in sorted(TraceStates.iteritems(), key=lambda (k,v): len(v)):
-    print i , "] -", ".".join(trace),"->",rbac_state(s)
+    print("{}] {}".format(i, rbac_state(s)))
     i += 1
 
 def traceToString(trace):
@@ -580,26 +577,26 @@ def printReachableStatesE(TraceStates):
   i = 1
   # this is lexicographic on the traces!
   #for s, trace in sorted(TraceStates.iteritems(), key=lambda (k,v): (v,k)):
-  for s, trace in sorted(TraceStates.iteritems(), key=lambda (k,v): len(v)):
-    print "     [" + str(i) + "] " + traceToString(trace) + rbac_state(s)
+  for s, trace in sorted(TraceStates.items(), key=lambda k: len(k)):
+    print("     [{}] {}{}".format(i, traceToString(trace), rbac_state(s)))
     i += 1
 
 def printTrans(Trans,loops):
   i = 1
   for t in Trans:
     if loops or t[0] != t[2]:
-      print i, "] ", t[0]
-      print "\t\t\t\t -",t[1],"->",t[2]
+      print("{}] {}".format(i, t[0]))
+      print("\t\t\t\t -{}-> {}".format(t[1], t[2]))
       i += 1
 
 def printTransMap(loops):
   i = 1
   for t in TransMap.keys():
-    print "state",i, "> ", t
+    print("state {} > {}".format(i, t))
     j = 1
     for tt in TransMap[t]:
       if loops or t != tt[1]:
-        print (str(i)+"."+str(j)).rjust(10)," - ",tt[0].ljust(17),"->",tt[1]
+        print((str(i)+"."+str(j)).rjust(10)," - ",tt[0].ljust(17),"->",tt[1])
         j+=1
     i+=1
 
@@ -790,7 +787,7 @@ def indirect_flows():
           print("     Traces for writing:")
           i = 1
           for ww in objs[w]: 
-            print "     [{}] ".format(i) + rbac_state(s1) +  traceToStringReverse(ww) 
+            print("     [{}] ".format(i) + rbac_state(s1) +  traceToStringReverse(ww))
             i += 1
           print("     Traces for reading:")
           printReachableStatesE(s2_reach_r)
@@ -835,12 +832,12 @@ def flows_wx(s):
         print("     Traces for writing:")
         i = 1
         for ww in result_w[w]: 
-          print "     [{}] ".format(i) + rbac_state(s) +  traceToStringReverse(ww) 
+          print("     [{}] ".format(i) + rbac_state(s) +  traceToStringReverse(ww))
           i += 1
         print("     Traces for executing:")
         i = 1
         for xx in result_x[w]: 
-          print "     [{}] ".format(i) + rbac_state(s) +  traceToStringReverse(xx) 
+          print("     [{}] ".format(i) + rbac_state(s) +  traceToStringReverse(xx))
           i += 1
   except KeyError:
     pass
@@ -913,7 +910,7 @@ if args.processedpolicy:
 lexer = lex.lex(debug=args.debug)
 parser = yacc.yacc(debug=args.debug)
 
-print "Parsing the policy"
+print("Parsing the policy")
 result = parser.parse(data)
 
 perms = {}
@@ -934,7 +931,7 @@ role_subjects = {} # a dictionary giving a dictionary of subject:mode for each r
 role_subject_objects = {} # a dictionary giving objects from (role,subject)
 role_subject_caps = {}
 
-print "Computing user/group roles"
+print("Computing user/group roles")
 # Get role names as pairs and the sets of user/group roles
 for role in result:
 
@@ -971,7 +968,7 @@ if args.admin:
 else:
   b_roles = Radmin
 
-print "Computing permissions"
+print("Computing permissions")
 # builds the other sets
 for i in range(len(R)):
   roleN = R[i]  
@@ -1019,10 +1016,10 @@ for i in range(len(R)):
         perms[roleN,subject[0],object[0]] = object[1]
         O += [object[0]]
 
-print "Closing by inheritance"
+print("Closing by inheritance")
 # Computes Inheritance
 perms = Inheritance(R,role_subjects,perms)
-print "   N. Permissions", len(perms)
+print("   N. Permissions {}".format(len(perms)))
 
 # Computes role_subject_objects AFTER inheritance
 for p in perms:
@@ -1047,7 +1044,7 @@ InitialStates = States.copy()
 if not args.entrypoints:
   entry_points = [s for s in States if s[3] == '/']
 
-print "Generating Transitions"
+print("Generating Transitions")
 # transitions are initially empty
 TransMap = {}
 NTransMap = 0
@@ -1141,8 +1138,8 @@ while newStates != set([]):
          
   newStates = newStatesTmp
 
-print "   N. States", len(States)
-print "   N. Transitions", NTransMap
+print("   N. States {}".format(len(States)))
+print("   N. Transitions {}".format(NTransMap))
 
 object_with_read_permissions = {}
 object_with_write_permissions = {}
