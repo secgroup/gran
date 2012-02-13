@@ -5,7 +5,7 @@ Gran, a security analyser for Grsecurity RBAC policies
 
 ### Requirements
 
-* Python 2.7 or grater
+* Python 2.7 or greater (Python 3.X supported)
 * [PLY][] module, available in most Linux distributions. It can also be
   installed manually by executing `easy_install ply`
 
