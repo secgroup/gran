@@ -62,6 +62,7 @@ At the moment, the following Grsecurity RBAC features are supported:
 * object modes: `r`, `w`, `a`, `c`, `x`, `d`, `h`, `none`
 * capabilities: `CAP_ALL`, `CAP_SETUID`, `CAP_SETGID`
 * domains
+* include, define and replace rules
 
 The tool provides a limited support for wild-carded objects. Nested subjects
 are not supported, since the learning system of Grsecurity does not account for
