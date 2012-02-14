@@ -61,6 +61,7 @@ At the moment, the following Grsecurity RBAC features are supported:
                       `group_transition_allow`, `group_transition_deny`
 * object modes: `r`, `w`, `a`, `c`, `x`, `d`, `h`, `none`
 * capabilities: `CAP_ALL`, `CAP_SETUID`, `CAP_SETGID`
+* domains
 
 The tool provides a limited support for wild-carded objects. Nested subjects
 are not supported, since the learning system of Grsecurity does not account for

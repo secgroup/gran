@@ -132,8 +132,12 @@ def p_oid(t):
     t[0] = t[1]
 
 def p_role_definition(t):
-    'role_definition : ROLE ID oid role_allow_ip role_transitions subject_definitions' 
-    t[0] = [t[2],t[3],t[5],t[6]]
+    '''role_definition : ROLE ID oid role_allow_ip role_transitions subject_definitions
+                       | DOMAIN ID oid ids role_allow_ip role_transitions subject_definitions'''
+    if len(t) == 7:
+      t[0] = [t[2],t[3],t[5],t[6]]
+    else:
+      t[0] = [t[4],t[3],t[6],t[7]]
 
 def p_role_allow_ip(t):
     '''role_allow_ip : ROLE_ALLOW_IP IP_ADDRESS cidr_netmask role_allow_ip
@@ -355,6 +359,17 @@ def get_policy(fname):
       f.close()
 
     return policy
+
+def expand_domains(ast):
+  """Expand domains into several user/group roles and returns the new AST"""
+
+  for r in ast:
+    if type(r[0]) == set:
+      for u in r[0]:
+        ast.append([u] + r[1:])
+      ast.remove(r)
+  return ast
+
 
 def pathmatch(p1,p2):
   """Finds if p2 matches p1, which may contain wildcards. We have checked that
@@ -869,7 +884,7 @@ lexer = lex.lex(debug=args.debug)
 parser = yacc.yacc(debug=args.debug)
 
 print("Parsing the policy")
-result = parser.parse(data)
+result = expand_domains(parser.parse(data))
 
 perms = {}
 role_trans = {}
