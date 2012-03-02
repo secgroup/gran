@@ -363,12 +363,13 @@ def get_policy(fname):
 def expand_domains(ast):
     """Expand domains into several user/group roles and return the new AST"""
 
+    newast = list(ast)
     for r in ast:
         if type(r[0]) == set:
             for u in r[0]:
-                ast.append([u] + r[1:])
-            ast.remove(r)
-    return ast
+                newast.append([u] + r[1:])
+            newast.remove(r)
+    return newast
 
 
 def pathmatch(p1,p2):
