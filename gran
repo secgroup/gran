@@ -758,10 +758,13 @@ def indirect_flows():
                 s2_reach_r = {s:s2_reach[s] for s in s2_reach if Read(s, w)}
                 if s2_reach_r != {}:
                     print("[!!] Indirect flow found for target {} on object {}".format(t, w))
-                    print("     Traces for writing:")
-                    i = 1
+                    print("     Traces for reading-writing:")
+                    traces = set()
                     for ww in objs[w]: 
-                        print("     [{}] ".format(i) + rbac_state(s1) + traceToStringReverse(ww))
+                        traces.add(rbac_state(s1) + traceToStringReverse(ww))
+                    i = 1
+                    for trace in sorted(traces, key=len):
+                        print("     [{}] ".format(i) + trace)
                         i += 1
                     print("     Traces for reading:")
                     printReachableStatesE(s2_reach_r)
