@@ -807,14 +807,20 @@ def flows_wx(s):
             if w in result_x.keys():
                 print("[!!] Write-Execute flow found on object {}".format(w))
                 print("     Traces for writing:")
+                wtraces = set()
+                xtraces = set()
+                for ww in result_w[w]:
+                    wtraces.add(rbac_state(s) +  traceToStringReverse(ww))
                 i = 1
-                for ww in result_w[w]: 
-                    print("     [{}] ".format(i) + rbac_state(s) +  traceToStringReverse(ww))
+                for wtrace in sorted(wtraces, key=len):
+                    print("     [{}] ".format(i) + wtrace)
                     i += 1
                 print("     Traces for executing:")
+                for xx in result_x[w]:
+                    xtraces.add(rbac_state(s) +  traceToStringReverse(xx))
                 i = 1
-                for xx in result_x[w]: 
-                    print("     [{}] ".format(i) + rbac_state(s) +  traceToStringReverse(xx))
+                for xtrace in sorted(xtraces, key=len):
+                    print("     [{}] ".format(i) + xtrace)
                     i += 1
     except KeyError:
         pass
@@ -1139,7 +1145,7 @@ if flow_targets != []:
     print("=======================\n")
     indirect_flows()
 
-if flow_targets != [] and entry_points != []:
+if entry_points != []:
     print("\nWRITE-EXECUTE FLOWS ANALYSIS")
     print("============================\n")
     for s in entry_points:
