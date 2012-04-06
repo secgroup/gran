@@ -31,6 +31,7 @@ policy_objs = """
 		/usr/share			h
 		/usr/share/terminfo		r
 		-CAP_ALL"""
+
 fnull = None
 
 def run_gran():
@@ -48,7 +49,7 @@ def main():
 	global fnull
 
 	fnull = open(os.devnull, 'w')
-	for roles in range(int(sys.argv[1])):
+	for roles in range(0, int(sys.argv[1]), 10):
 		create_policy(roles)
 		time = timeit.Timer(stmt='run_gran()', setup='from __main__ import run_gran')
 		print("{} {}".format(roles + 1, time.timeit(number=1)))
