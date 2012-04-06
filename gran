@@ -943,6 +943,8 @@ for role in result:
     if 'A' in role[1]: # administrative role
         Radmin |= set([pair])
 
+print("   Number of roles: {}".format(len(R)))
+
 # if we set -a from command line, initialize b_roles to the empty set,
 # otherwise fill it with administrative roles
 if args.admin:
@@ -1001,7 +1003,7 @@ for i in range(len(R)):
 print("Closing by inheritance")
 # Computes Inheritance
 perms = Inheritance(R,role_subjects,perms)
-print("   N. Permissions {}".format(len(perms)))
+print("   Number of permissions: {}".format(len(perms)))
 
 # Computes role_subject_objects AFTER inheritance
 for p in perms:
@@ -1117,8 +1119,8 @@ while newStates != set([]):
                  
     newStates = newStatesTmp
 
-print("   N. States {}".format(len(States)))
-print("   N. Transitions {}".format(NTransMap))
+print("   Number of states: {}".format(len(States)))
+print("   Number of transitions: {}".format(NTransMap))
 
 object_with_read_permissions = {}
 object_with_write_permissions = {}
