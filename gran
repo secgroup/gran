@@ -51,9 +51,7 @@ tokens = [
     'PAX_FLAG',
     'LIMIT',
     'IP_ADDRESS',
-    'NUMBER',
     'OPATH',
-    'RES',
     'PORT',
     'ID'                # default in case the reserved word does not match
 ] + list(reserved.values())
@@ -74,9 +72,7 @@ def t_RESOURCE(t):
     r'RES_[A-Z]*'
     return t
 
-t_RES = r'RES_[A-Z_]*'
 t_LIMIT = r'[0-9]+[a-zA-Z]?' # a number followed by an optional single char (the unit)
-t_NUMBER = r'[0-9]+'
 t_IP_ADDRESS = r'[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+'
 t_OPATH = r'(/[\w\.\*\?\-\+\_]*)+'
 t_PORT = r':[0-9]+(\-[0-9]+)?'

@@ -35,8 +35,9 @@ policy_objs = """
 fnull = None
 
 def run_gran():
-	subprocess.call(["../gran", "policy"], stdout=fnull, stderr=fnull)
-
+	#subprocess.call(["../gran", "policy"], stdout=fnull, stderr=fnull)
+    subprocess.call(["../gran", "policy"])
+		
 def create_policy(rolen):
 	policy = policy_base
 	for role in range(rolen):
